@@ -1,0 +1,165 @@
+package com.example.flashcardquizapp
+
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.*
+import androidx.compose.material.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.flashcardquizapp.ui.theme.FlashcardQuizAppTheme
+
+// Data model for Flashcard
+data class Flashcard(
+    val question: String,
+    val answer: String
+)
+
+// ViewModel for managing the flashcards and quiz state
+class FlashcardViewModel : ViewModel() {
+    var flashcards = mutableStateListOf<Flashcard>()
+        private set
+
+    var currentQuestionIndex by mutableStateOf(0)
+    var correctAnswers by mutableStateOf(0)
+
+    fun addFlashcard(question: String, answer: String) {
+        flashcards.add(Flashcard(question, answer))
+    }
+
+    fun resetQuiz() {
+        currentQuestionIndex = 0
+        correctAnswers = 0
+        flashcards.shuffle()
+    }
+
+    fun nextQuestion() {
+        currentQuestionIndex++
+    }
+
+    fun isQuizFinished(): Boolean {
+        return currentQuestionIndex >= flashcards.size
+    }
+
+    fun checkAnswer(userAnswer: String): Boolean {
+        val correct = flashcards[currentQuestionIndex].answer.equals(userAnswer, ignoreCase = true)
+        if (correct) correctAnswers++
+        return correct
+    }
+}
+
+@Composable
+fun FlashcardScreen(viewModel: FlashcardViewModel, onStartQuiz: () -> Unit) {
+    var question by remember { mutableStateOf("") }
+    var answer by remember { mutableStateOf("") }
+
+    Column(modifier = Modifier.padding(16.dp)) {
+        Text("Add a Flashcard", fontSize = 20.sp)
+        OutlinedTextField(value = question, onValueChange = { question = it }, label = { Text("Question") })
+        OutlinedTextField(value = answer, onValueChange = { answer = it }, label = { Text("Answer") })
+        Button(onClick = {
+            if (question.isNotBlank() && answer.isNotBlank()) {
+                viewModel.addFlashcard(question, answer)
+                question = ""
+                answer = ""
+            }
+        }) {
+            Text("Add")
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+        Button(onClick = {
+            viewModel.resetQuiz()
+            onStartQuiz()
+        }, enabled = viewModel.flashcards.isNotEmpty()) {
+            Text("Start Quiz")
+        }
+    }
+}
+
+@Composable
+fun QuizScreen(viewModel: FlashcardViewModel, onFinish: () -> Unit) {
+    if (viewModel.isQuizFinished()) {
+        onFinish()
+        return
+    }
+
+    val flashcard = viewModel.flashcards[viewModel.currentQuestionIndex]
+    var userAnswer by remember { mutableStateOf("") }
+    var showResult by remember { mutableStateOf(false) }
+    var isCorrect by remember { mutableStateOf(false) }
+
+    Column(modifier = Modifier.padding(16.dp)) {
+        Text("Question ${viewModel.currentQuestionIndex + 1}", fontSize = 18.sp)
+        Text(flashcard.question, fontSize = 22.sp)
+        OutlinedTextField(value = userAnswer, onValueChange = { userAnswer = it }, label = { Text("Your Answer") })
+
+        if (!showResult) {
+            Button(onClick = {
+                isCorrect = viewModel.checkAnswer(userAnswer)
+                showResult = true
+            }) {
+                Text("Submit")
+            }
+        } else {
+            Text(if (isCorrect) "Correct!" else "Incorrect. Answer: ${flashcard.answer}")
+            Button(onClick = {
+                userAnswer = ""
+                showResult = false
+                viewModel.nextQuestion()
+            }) {
+                Text("Next")
+            }
+        }
+    }
+}
+
+@Composable
+fun ScoreScreen(viewModel: FlashcardViewModel, onRestart: () -> Unit) {
+    Column(modifier = Modifier.padding(16.dp)) {
+        Text("Quiz Completed!", fontSize = 24.sp)
+        Text("Score: ${viewModel.correctAnswers} / ${viewModel.flashcards.size}", fontSize = 20.sp)
+        Button(onClick = onRestart) {
+            Text("Back to Home")
+        }
+    }
+}
+
+@Composable
+fun MainContent() {
+    val viewModel: FlashcardViewModel = viewModel()
+    var screen by remember { mutableStateOf("home") }
+
+    when (screen) {
+        "home" -> FlashcardScreen(viewModel) { screen = "quiz" }
+        "quiz" -> QuizScreen(viewModel) { screen = "score" }
+        "score" -> ScoreScreen(viewModel) { screen = "home" }
+    }
+}
+
+@Composable
+@Preview(showBackground = true)
+fun DefaultPreview() {
+    FlashcardQuizAppTheme {
+        MainContent()
+    }
+}
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            FlashcardQuizAppTheme {
+                MainContent()
+            }
+        }
+    }
+}
